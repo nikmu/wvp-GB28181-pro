@@ -1,5 +1,6 @@
 package com.genersoft.iot.vmp.gb28181.transmit.event.request;
 
+import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.ParentPlatform;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPSender;
 import com.genersoft.iot.vmp.gb28181.utils.SipUtils;
@@ -134,6 +135,31 @@ public abstract class SIPRequestProcessorParent {
 		SipURI sipURI = (SipURI)request.getRequestURI();
 		if (sipURI.getPort() == -1) {
 			sipURI = SipFactory.getInstance().createAddressFactory().createSipURI(platform.getServerGBId(),  platform.getServerIP()+":"+platform.getServerPort());
+		}
+		ResponseAckExtraParam responseAckExtraParam = new ResponseAckExtraParam();
+		responseAckExtraParam.contentTypeHeader = contentTypeHeader;
+		responseAckExtraParam.content = sdp;
+		responseAckExtraParam.sipURI = sipURI;
+
+		return responseAck(request, Response.OK, null, responseAckExtraParam);
+	}
+
+	/**
+	 * 回复设备的带SDP的200
+	 * @param request
+	 * @param sdp
+	 * @param device
+	 * @return
+	 * @throws SipException
+	 * @throws InvalidArgumentException
+	 * @throws ParseException
+	 */
+	public SIPResponse responseSdpAck(SIPRequest request, String sdp, Device device) throws SipException, InvalidArgumentException, ParseException {
+		ContentTypeHeader contentTypeHeader = SipFactory.getInstance().createHeaderFactory().createContentTypeHeader("APPLICATION", "SDP");
+
+		SipURI sipURI = (SipURI)request.getRequestURI();
+		if (sipURI.getPort() == -1) {
+			sipURI = SipFactory.getInstance().createAddressFactory().createSipURI(device.getDeviceId(),  device.getIp()+":"+device.getPort());
 		}
 		ResponseAckExtraParam responseAckExtraParam = new ResponseAckExtraParam();
 		responseAckExtraParam.contentTypeHeader = contentTypeHeader;

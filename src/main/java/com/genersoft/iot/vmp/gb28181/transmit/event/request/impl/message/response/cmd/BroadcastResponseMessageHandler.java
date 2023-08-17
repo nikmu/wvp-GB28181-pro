@@ -1,14 +1,19 @@
 package com.genersoft.iot.vmp.gb28181.transmit.event.request.impl.message.response.cmd;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.genersoft.iot.vmp.common.InviteInfo;
+import com.genersoft.iot.vmp.common.InviteSessionType;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.ParentPlatform;
+import com.genersoft.iot.vmp.gb28181.transmit.callback.BroadcastInfoHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.DeferredResultHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.SIPRequestProcessorParent;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.impl.message.IMessageHandler;
 import com.genersoft.iot.vmp.gb28181.transmit.event.request.impl.message.response.ResponseMessageHandler;
 import com.genersoft.iot.vmp.gb28181.utils.XmlUtil;
+import com.genersoft.iot.vmp.service.IInviteStreamService;
+import gov.nist.javax.sip.header.Subject;
 import gov.nist.javax.sip.message.SIPRequest;
 import org.dom4j.Element;
 import org.slf4j.Logger;
@@ -20,6 +25,7 @@ import org.springframework.stereotype.Component;
 import javax.sip.InvalidArgumentException;
 import javax.sip.RequestEvent;
 import javax.sip.SipException;
+import javax.sip.header.Header;
 import javax.sip.message.Response;
 import java.text.ParseException;
 
@@ -46,7 +52,7 @@ public class BroadcastResponseMessageHandler extends SIPRequestProcessorParent i
     public void handForDevice(RequestEvent evt, Device device, Element rootElement) {
         try {
             String channelId = getText(rootElement, "DeviceID");
-            String key = DeferredResultHolder.CALLBACK_CMD_BROADCAST + device.getDeviceId() + channelId;
+//            String key = DeferredResultHolder.CALLBACK_CMD_BROADCAST + device.getDeviceId() + channelId;
             // 回复200 OK
             responseAck((SIPRequest) evt.getRequest(), Response.OK);
             // 此处是对本平台发出Broadcast指令的应答
@@ -55,11 +61,12 @@ public class BroadcastResponseMessageHandler extends SIPRequestProcessorParent i
             if (logger.isDebugEnabled()) {
                 logger.debug(json.toJSONString());
             }
-            RequestMessage msg = new RequestMessage();
-            msg.setKey(key);
-            msg.setData(json);
-            deferredResultHolder.invokeAllResult(msg);
-
+            // 这里不应该对前端回复，通道还没有建立
+//            RequestMessage msg = new RequestMessage();
+//            msg.setKey(key);
+//            msg.setData(json);
+//            deferredResultHolder.invokeAllResult(msg);
+            logger.info("[命令发送成功] 语音广播 回复: {}", json);
 
         } catch (ParseException | SipException | InvalidArgumentException e) {
             logger.error("[命令发送失败] 国标级联 语音喊话: {}", e.getMessage());

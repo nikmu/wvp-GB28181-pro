@@ -24,6 +24,8 @@ import userManager from '../components/UserManager.vue'
 import wasmPlayer from '../components/common/jessibuca.vue'
 import rtcPlayer from '../components/dialog/rtcPlayer.vue'
 
+import audioTest from '../components/audioTest.vue'
+
 const originalPush = VueRouter.prototype.push
 VueRouter.prototype.push = function push(location) {
   return originalPush.call(this, location).catch(err => err)
@@ -41,6 +43,10 @@ export default new VueRouter({
       component: Layout,
       redirect: '/console',
       children: [
+        {
+          path: '/audioTest',
+          component: audioTest,
+        },
         {
           path: '/console',
           component: console,

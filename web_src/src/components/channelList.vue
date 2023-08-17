@@ -98,6 +98,7 @@
             <el-button size="medium" v-bind:disabled="device == null || device.online === 0" icon="el-icon-switch-button" type="text"  style="color: #f56c6c" v-if="!!scope.row.streamId"
                        @click="stopDevicePush(scope.row)">停止
             </el-button>
+            
             <el-divider direction="vertical"></el-divider>
             <el-button size="medium" icon="el-icon-s-open" type="text" v-if="scope.row.subCount > 0 || scope.row.parental === 1"
                        @click="changeSubchannel(scope.row)">查看
@@ -439,8 +440,7 @@ export default {
         this.parentChannelId = data.channelId;
       }
       this.initData();
-    }
-
+    },
   }
 };
 </script>

@@ -108,4 +108,8 @@ public class LoginUser implements UserDetails, CredentialsContainer {
     public void setAccessToken(String accessToken) {
         this.accessToken = accessToken;
     }
+
+    public String getPushKey() {
+        return user.getPushKey();
+    }
 }

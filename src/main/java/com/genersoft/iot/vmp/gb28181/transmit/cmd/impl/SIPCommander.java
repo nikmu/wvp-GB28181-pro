@@ -8,6 +8,7 @@ import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
 import com.genersoft.iot.vmp.gb28181.SipLayer;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceAlarm;
+import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
 import com.genersoft.iot.vmp.gb28181.bean.SsrcTransaction;
 import com.genersoft.iot.vmp.gb28181.event.SipSubscribe;
 import com.genersoft.iot.vmp.gb28181.session.VideoStreamSessionManager;
@@ -33,10 +34,7 @@ import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ObjectUtils;
 
-import javax.sip.InvalidArgumentException;
-import javax.sip.ResponseEvent;
-import javax.sip.SipException;
-import javax.sip.SipFactory;
+import javax.sip.*;
 import javax.sip.header.CallIdHeader;
 import javax.sip.message.Request;
 import java.text.ParseException;
@@ -606,6 +604,17 @@ public class SIPCommander implements ISIPCommander {
         streamByeCmd(device, channelId, stream, callId, null);
     }
 
+    @Override
+    public void audioStreamByeCmd(Device device, String channelId, String callId, String stream) throws InvalidArgumentException, ParseException, SipException, SsrcTransactionNotFoundException {
+        SsrcTransaction ssrcTransaction = streamSession.getSsrcTransaction(device.getDeviceId(), channelId, callId, stream);
+        if (ssrcTransaction == null) {
+            throw new SsrcTransactionNotFoundException(device.getDeviceId(), channelId, callId, stream);
+        }
+        streamSession.remove(ssrcTransaction.getDeviceId(), ssrcTransaction.getChannelId(), ssrcTransaction.getStream());
+        Request byteRequest = headerProvider.createByteRequest(device, channelId, ssrcTransaction.getSipTransactionInfo());
+        sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), byteRequest, null, null);
+    }
+
     /**
      * 视频流停止
      */
@@ -660,7 +669,34 @@ public class SIPCommander implements ISIPCommander {
     }
 
     @Override
-    public void audioBroadcastCmd(Device device, SipSubscribe.Event errorEvent) throws InvalidArgumentException, SipException, ParseException {
+    public void audioInviteCmd(Device device, DeviceChannel deviceChannel, MediaServerItem mediaServerItem) throws InvalidArgumentException, SipException, ParseException {
+        int localPort = 30002;
+        StringBuffer content = new StringBuffer(200);
+        content.append("v=0\r\n");
+        content.append("o=" + sipConfig.getId() + " 0 0 IN IP4 " + mediaServerItem.getSdpIp() + "\r\n");
+        content.append("s=Talk\r\n");
+        content.append("c=IN IP4 " + mediaServerItem.getSdpIp() + "\r\n");
+        content.append("t=0 0\r\n");
+        content.append("m=audio " + localPort + " RTP/AVP 8 96\r\n");
+        content.append("a=sendrecv\r\n");
+        content.append("a=rtpmap:8 PCMA/8000\r\n");
+        content.append("a=rtpmap:96 PS/90000\r\n");
+        content.append("y=0200000002\r\n");
+        content.append("f=v/a/1/8/1\r\n");
+
+        Request request = headerProvider.createInviteRequest(device, deviceChannel.getChannelId(), content.toString(),
+                SipUtils.getNewViaTag(), SipUtils.getNewFromTag(), null, "0200000002",
+                sipSender.getNewCallIdHeader(sipLayer.getLocalIp(device.getLocalIp()),device.getTransport()));
+
+        sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), request, (e -> {
+
+        }), e -> {
+
+        });
+    }
+
+    @Override
+    public void audioBroadcastCmd(Device device, DeviceChannel deviceChannel, SipSubscribe.Event errorEvent) throws InvalidArgumentException, SipException, ParseException {
 
         StringBuffer broadcastXml = new StringBuffer(200);
         String charset = device.getCharset();
@@ -669,7 +705,7 @@ public class SIPCommander implements ISIPCommander {
         broadcastXml.append("<CmdType>Broadcast</CmdType>\r\n");
         broadcastXml.append("<SN>" + (int) ((Math.random() * 9 + 1) * 100000) + "</SN>\r\n");
         broadcastXml.append("<SourceID>" + sipConfig.getId() + "</SourceID>\r\n");
-        broadcastXml.append("<TargetID>" + device.getDeviceId() + "</TargetID>\r\n");
+        broadcastXml.append("<TargetID>" + deviceChannel.getChannelId() + "</TargetID>\r\n");
         broadcastXml.append("</Notify>\r\n");
 
         

@@ -4,6 +4,7 @@ import com.genersoft.iot.vmp.common.StreamInfo;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceAlarm;
+import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
 import com.genersoft.iot.vmp.gb28181.event.SipSubscribe;
 import com.genersoft.iot.vmp.media.zlm.ZlmHttpHookSubscribe;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
@@ -11,6 +12,7 @@ import com.genersoft.iot.vmp.service.bean.SSRCInfo;
 import gov.nist.javax.sip.message.SIPRequest;
 
 import javax.sip.InvalidArgumentException;
+import javax.sip.PeerUnavailableException;
 import javax.sip.SipException;
 import java.text.ParseException;
 
@@ -131,6 +133,13 @@ public interface ISIPCommander {
 	void streamByeCmd(Device device, String channelId, String stream, String callId) throws InvalidArgumentException, ParseException, SipException, SsrcTransactionNotFoundException;
 
 	/**
+	 * 语音广播流停止
+	 * @param device
+	 * @param callId
+	 */
+	void audioStreamByeCmd(Device device, String channelId, String callId, String stream) throws InvalidArgumentException, ParseException, SipException, SsrcTransactionNotFoundException;
+
+	/**
 	 * 回放暂停
 	 */
 	void playPauseCmd(Device device, StreamInfo streamInfo) throws InvalidArgumentException, ParseException, SipException;
@@ -172,9 +181,10 @@ public interface ISIPCommander {
 	 * 
 	 * @param device  视频设备
 	 */
-	void audioBroadcastCmd(Device device, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException;
+	void audioBroadcastCmd(Device device, DeviceChannel deviceChannel, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException;
 	void audioBroadcastCmd(Device device) throws InvalidArgumentException, SipException, ParseException;
-	
+
+	void audioInviteCmd(Device device, DeviceChannel deviceChannel, MediaServerItem mediaServerItem) throws InvalidArgumentException, SipException, ParseException;
 	/**
 	 * 音视频录像控制
 	 * 

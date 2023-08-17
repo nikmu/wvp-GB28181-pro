@@ -231,7 +231,9 @@
                     </div>
 
                 </el-tab-pane>
-
+                <el-tab-pane label="语音对讲" name="audio" v-if="showPtz">
+                  <audio-broadcast :deviceId="deviceId" :channelId="channelId" :error="audioError"></audio-broadcast>
+                </el-tab-pane>
             </el-tabs>
         </div>
     </el-dialog>
@@ -239,6 +241,7 @@
 </template>
 
 <script>
+import audioBroadcast from './audioBroadcast.vue';
 import rtcPlayer from '../dialog/rtcPlayer.vue'
 import LivePlayer from '@liveqing/liveplayer'
 import jessibucaPlayer from '../common/jessibuca.vue'
@@ -247,6 +250,7 @@ export default {
     props: {},
     components: {
       LivePlayer, jessibucaPlayer, rtcPlayer,
+      audioBroadcast,
     },
     computed: {
         getPlayerShared: function () {
@@ -507,6 +511,9 @@ export default {
         //////////////////////播放器事件处理//////////////////////////
         videoError: function (e) {
             console.log("播放器错误：" + JSON.stringify(e));
+        },
+        audioError: function (e) {
+          console.log("语音错误：" + JSON.stringify(e))
         },
         presetPosition: function (cmdCode, presetPos) {
             console.log('预置位控制：' + this.presetPos + ' : 0x' + cmdCode.toString(16));

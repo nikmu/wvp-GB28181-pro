@@ -10,12 +10,16 @@ import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
+import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
+import com.genersoft.iot.vmp.gb28181.bean.SendRtpItem;
 import com.genersoft.iot.vmp.gb28181.bean.SsrcTransaction;
 import com.genersoft.iot.vmp.gb28181.session.VideoStreamSessionManager;
+import com.genersoft.iot.vmp.gb28181.transmit.callback.BroadcastInfoHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.DeferredResultHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
 import com.genersoft.iot.vmp.media.zlm.ZLMRESTfulUtils;
+import com.genersoft.iot.vmp.media.zlm.ZLMServerFactory;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.service.IInviteStreamService;
 import com.genersoft.iot.vmp.service.IMediaServerService;
@@ -28,6 +32,7 @@ import com.genersoft.iot.vmp.utils.DateUtil;
 import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
 import com.genersoft.iot.vmp.vmanager.bean.StreamContent;
 import com.genersoft.iot.vmp.vmanager.bean.WVPResult;
+import com.github.pagehelper.PageInfo;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,7 +46,9 @@ import javax.servlet.http.HttpServletRequest;
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
 import java.text.ParseException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Tag(name  = "国标设备点播")
@@ -84,6 +91,12 @@ public class PlayController {
 
 	@Autowired
 	private UserSetting userSetting;
+
+	@Autowired
+	private BroadcastInfoHolder broadcastInfoHolder;
+
+	@Autowired
+	private ZLMServerFactory zlmServerFactory;
 
 	@Operation(summary = "开始点播")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
@@ -256,68 +269,107 @@ public class PlayController {
 
 	@Operation(summary = "语音广播命令")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
-    @GetMapping("/broadcast/{deviceId}")
-    @PostMapping("/broadcast/{deviceId}")
-    public DeferredResult<String> broadcastApi(@PathVariable String deviceId) {
+    @RequestMapping("/broadcast/{deviceId}/{channelId}")
+    public DeferredResult<String> broadcastApi(@PathVariable String deviceId, @PathVariable String channelId, @RequestParam String mediaServerId) {
         if (logger.isDebugEnabled()) {
             logger.debug("语音广播API调用");
         }
         Device device = storager.queryVideoDevice(deviceId);
+        if (device == null) {
+			throw new ControllerException(ErrorCode.ERROR400.getCode(), "设备：" + deviceId + "不存在" );
+		}
+		DeviceChannel audioChannel = null;
+		if (!"137".equals(channelId.substring(10, 13))) {
+			PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
+			audioChannel = deviceChannels.getList().stream().filter(channel -> channel.getChannelId().startsWith("137", 10)).findFirst().orElse(null);
+			if (audioChannel == null) {
+				throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+			}
+			channelId = audioChannel.getChannelId();
+		} else {
+			audioChannel = storager.queryChannel(deviceId, channelId);
+		}
+		String finalChannelId = channelId;
+
 		DeferredResult<String> result = new DeferredResult<>(3 * 1000L);
-		String key  = DeferredResultHolder.CALLBACK_CMD_BROADCAST + deviceId;
+		String key  = DeferredResultHolder.CALLBACK_CMD_BROADCAST + deviceId + finalChannelId;
 		if (resultHolder.exist(key, null)) {
 			result.setResult("设备使用中");
 			return result;
 		}
 		String uuid  = UUID.randomUUID().toString();
-        if (device == null) {
-
-			resultHolder.put(key, key,  result);
-			RequestMessage msg = new RequestMessage();
-			msg.setKey(key);
-			msg.setId(uuid);
-			JSONObject json = new JSONObject();
-			json.put("DeviceID", deviceId);
-			json.put("CmdType", "Broadcast");
-			json.put("Result", "Failed");
-			json.put("Description", "Device 不存在");
-			msg.setData(json);
-			resultHolder.invokeResult(msg);
-			return result;
-		}
 		try {
-			cmder.audioBroadcastCmd(device, (event) -> {
+			// 记录语音推送到的媒体服务器
+			MediaServerItem mediaServerItem = mediaServerService.getOne(mediaServerId);
+			broadcastInfoHolder.setMediaServerInfo(deviceId, finalChannelId, mediaServerItem);
+			cmder.audioBroadcastCmd(device, audioChannel, (event) -> {
 				RequestMessage msg = new RequestMessage();
 				msg.setKey(key);
 				msg.setId(uuid);
-				JSONObject json = new JSONObject();
-				json.put("DeviceID", deviceId);
-				json.put("CmdType", "Broadcast");
-				json.put("Result", "Failed");
-				json.put("Description", String.format("语音广播操作失败，错误码： %s, %s", event.statusCode, event.msg));
-				msg.setData(json);
+				msg.setData(WVPResult.fail(ErrorCode.ERROR100.getCode(), String.format("语音广播操作失败，错误码： %s, %s", event.statusCode, event.msg)));
+				broadcastInfoHolder.clearMediaServerInfo(deviceId, finalChannelId);
 				resultHolder.invokeResult(msg);
 			});
 		} catch (InvalidArgumentException | SipException | ParseException e) {
 			logger.error("[命令发送失败] 语音广播: {}", e.getMessage());
+			broadcastInfoHolder.clearMediaServerInfo(deviceId, audioChannel.getChannelId());
 			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
 		}
 
 		result.onTimeout(() -> {
 			logger.warn("语音广播操作超时, 设备未返回应答指令");
+			broadcastInfoHolder.clearMediaServerInfo(deviceId, finalChannelId);
 			RequestMessage msg = new RequestMessage();
 			msg.setKey(key);
 			msg.setId(uuid);
-			JSONObject json = new JSONObject();
-			json.put("DeviceID", deviceId);
-			json.put("CmdType", "Broadcast");
-			json.put("Result", "Failed");
-			json.put("Error", "Timeout. Device did not response to broadcast command.");
-			msg.setData(json);
+			msg.setData(WVPResult.fail(ErrorCode.ERROR100.getCode(), "Timeout. Device did not response to broadcast command."));
 			resultHolder.invokeResult(msg);
 		});
 		resultHolder.put(key, uuid, result);
 		return result;
+	}
+
+	@Operation(summary = "停止语音广播")
+	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
+	@RequestMapping("/broadcast/stop/{deviceId}/{channelId}")
+	public WVPResult audioStop(@PathVariable String deviceId, @PathVariable String channelId) {
+		Device device = storager.queryVideoDevice(deviceId);
+		if (device == null) {
+			throw new ControllerException(ErrorCode.ERROR400.getCode(), "设备：" + deviceId + "不存在" );
+		}
+
+		if (!"137".equals(channelId.substring(10, 13))) {
+			PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
+			DeviceChannel audioChannel = deviceChannels.getList().stream().filter(channel -> channel.getChannelId().startsWith("137", 10)).findFirst().orElse(null);
+			if (audioChannel == null) {
+				throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+			}
+			channelId = audioChannel.getChannelId();
+		}
+
+		try {
+			cmder.audioStreamByeCmd(device, channelId, null, null);
+		} catch (SipException | InvalidArgumentException | ParseException | SsrcTransactionNotFoundException e) {
+			logger.error("[命令发送失败] 国标级联 发送BYE: {}", e.getMessage());
+			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
+		}
+		SendRtpItem sendRtpItem =  redisCatchStorage.querySendRTPServer(device.getDeviceId(), channelId, null, null);
+		if (sendRtpItem != null) {
+			String streamId = sendRtpItem.getStreamId();
+			Map<String, Object> param = new HashMap<>();
+			param.put("vhost","__defaultVhost__");
+			param.put("app",sendRtpItem.getApp());
+			param.put("stream",streamId);
+			param.put("ssrc",sendRtpItem.getSsrc());
+			MediaServerItem mediaInfo = mediaServerService.getOne(sendRtpItem.getMediaServerId());
+			redisCatchStorage.deleteSendRTPServer(sendRtpItem.getPlatformId(), sendRtpItem.getChannelId(),
+					sendRtpItem.getCallId(), null);
+			zlmServerFactory.stopSendRtpStream(mediaInfo, param);
+		}
+
+		broadcastInfoHolder.clearMediaServerInfo(deviceId, channelId);
+
+		return WVPResult.success("语音通道已关闭");
 	}
 
 	@Operation(summary = "获取所有的ssrc")

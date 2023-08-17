@@ -13,6 +13,7 @@ module.exports = {
     proxyTable: {
       '/debug': {
         target: 'http://localhost:18080',
+        // target: 'http://36.138.248.172:8008',
         changeOrigin: true,
         pathRewrite: {
           '^/debug': '/'
@@ -20,6 +21,7 @@ module.exports = {
       },
       '/static/snap': {
         target: 'http://localhost:18080',
+        // target: 'http://36.138.248.172:8008',
         changeOrigin: true,
         // pathRewrite: {
         //   '^/static/snap': '/static/snap'

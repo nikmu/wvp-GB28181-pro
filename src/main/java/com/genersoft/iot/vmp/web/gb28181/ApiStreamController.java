@@ -3,8 +3,11 @@ package com.genersoft.iot.vmp.web.gb28181;
 import com.alibaba.fastjson2.JSONObject;
 import com.genersoft.iot.vmp.common.InviteInfo;
 import com.genersoft.iot.vmp.common.InviteSessionType;
+import com.genersoft.iot.vmp.common.StreamURL;
 import com.genersoft.iot.vmp.conf.UserSetting;
+import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
+import com.genersoft.iot.vmp.conf.security.dto.LoginUser;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
@@ -15,18 +18,18 @@ import com.genersoft.iot.vmp.service.IPlayService;
 import com.genersoft.iot.vmp.service.bean.InviteErrorCode;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.storager.IVideoManagerStorage;
+import com.genersoft.iot.vmp.vmanager.bean.ErrorCode;
+import com.github.pagehelper.PageInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.async.DeferredResult;
 
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
 import java.text.ParseException;
+import java.util.List;
 
 /**
  * API兼容：实时直播
@@ -246,5 +249,40 @@ public class ApiStreamController {
                             @RequestParam(required = false)String cdn
     ){
         return null;
+    }
+
+
+    /**
+     * 获取推送音频的webrtc地址
+     * @param deviceId
+     * @return
+     */
+    @RequestMapping(value = "/pushRtc/{deviceId}/{channelId}")
+    private JSONObject media(@PathVariable String deviceId, @PathVariable String channelId) {
+        Device device = storager.queryVideoDevice(deviceId);
+        if (device == null) {
+            throw new ControllerException(ErrorCode.ERROR400.getCode(), "设备：" + deviceId + "不存在" );
+        }
+        MediaServerItem newMediaServerItem = playService.getNewMediaServerItem(device);
+
+        if (!"137".equals(channelId.substring(10, 13))) {
+            PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
+            DeviceChannel audioChannel = deviceChannels.getList().stream().filter(channel -> channel.getChannelId().startsWith("137", 10)).findFirst().orElse(null);
+            if (audioChannel == null) {
+                throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+            }
+            channelId = audioChannel.getChannelId();
+        }
+
+
+        JSONObject result = new JSONObject();
+        String file = String.format("index/api/webrtc?app=%s&stream=%s&type=push", "audio", deviceId.concat("_").concat(channelId));
+        StreamURL pushRtc = new StreamURL("http", newMediaServerItem.getStreamIp(), newMediaServerItem.getHttpPort(), file);
+        StreamURL pushRtcs = new StreamURL("https", newMediaServerItem.getStreamIp(), newMediaServerItem.getHttpSSlPort(), file);
+
+        result.put("pushRtc", pushRtc.getUrl());
+        result.put("pushRtcs", pushRtcs.getUrl());
+        result.put("mediaId", newMediaServerItem.getId());
+        return  result;
     }
 }
