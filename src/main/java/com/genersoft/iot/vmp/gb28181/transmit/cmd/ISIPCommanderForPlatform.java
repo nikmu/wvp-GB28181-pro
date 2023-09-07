@@ -2,7 +2,10 @@ package com.genersoft.iot.vmp.gb28181.transmit.cmd;
 
 import com.genersoft.iot.vmp.gb28181.bean.*;
 import com.genersoft.iot.vmp.gb28181.event.SipSubscribe;
+import com.genersoft.iot.vmp.media.zlm.ZlmHttpHookSubscribe;
+import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.service.bean.GPSMsgInfo;
+import com.genersoft.iot.vmp.service.bean.SSRCInfo;
 
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
@@ -125,4 +128,31 @@ public interface ISIPCommanderForPlatform {
      */
     void streamByeCmd(ParentPlatform platform, String callId) throws SipException, InvalidArgumentException, ParseException;
     void streamByeCmd(ParentPlatform platform, SendRtpItem sendRtpItem) throws SipException, InvalidArgumentException, ParseException;
+
+    /**
+     * 向上级回复广播应答
+     * @param parentPlatform
+     * @param channelId
+     * @param sn
+     * @param errorEvent
+     * @throws InvalidArgumentException
+     * @throws SipException
+     * @throws ParseException
+     */
+    void audioBroadcastResponseCmd(ParentPlatform parentPlatform, String channelId, String sn, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException;
+
+    /**
+     * 向上级发送广播INVITE
+     * @param parentPlatform
+     * @param channelId
+     * @param mediaServerItem
+     * @param ssrcInfo
+     * @param errorEvent
+     * @param okEvent
+     * @throws InvalidArgumentException
+     * @throws SipException
+     * @throws ParseException
+     */
+    void audioInviteCmd(ParentPlatform parentPlatform, String channelId, MediaServerItem mediaServerItem, SSRCInfo ssrcInfo, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent, ZlmHttpHookSubscribe.Event event) throws InvalidArgumentException, SipException, ParseException;
+
 }

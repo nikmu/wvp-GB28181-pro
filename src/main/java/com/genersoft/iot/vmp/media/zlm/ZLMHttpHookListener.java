@@ -256,7 +256,7 @@ public class ZLMHttpHookListener {
             result.setEnable_mp4(userSetting.isRecordPushLive());
         }
         // 替换流地址
-        if ("rtp".equals(param.getApp()) && !mediaInfo.isRtpEnable()) {
+        if ("rtp".equals(param.getApp()) && !mediaInfo.isRtpEnable() && param.getStream().length() == 8) {
             String ssrc = String.format("%010d", Long.parseLong(param.getStream(), 16));;
             InviteInfo inviteInfo = inviteStreamService.getInviteInfoBySSRC(ssrc);
             if (inviteInfo != null) {

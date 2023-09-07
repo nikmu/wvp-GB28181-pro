@@ -186,6 +186,9 @@ public class ParentPlatform {
     @Schema(description = "是否作为消息通道")
     private boolean asMessageChannel;
 
+    @Schema(description = "流传输模式")
+    private String streamMode = "TCP-ACTIVE"; // 暂时只是对讲使用，默认TCP主动
+
     public Integer getId() {
         return id;
     }
@@ -424,5 +427,13 @@ public class ParentPlatform {
 
     public void setAsMessageChannel(boolean asMessageChannel) {
         this.asMessageChannel = asMessageChannel;
+    }
+
+    public String getStreamMode() {
+        return streamMode;
+    }
+
+    public void setStreamMode(String streamMode) {
+        this.streamMode = streamMode;
     }
 }

@@ -108,7 +108,7 @@ public interface PlatformChannelMapper {
             "</script>")
     int delChannelForGBByCatalogId(String platformId, String catalogId);
 
-    @Select("select dc.channel_id dc.device_id,dc.name,d.manufacturer,d.model,d.firmware\n" +
+    @Select("select dc.channel_id, dc.device_id,dc.name,d.manufacturer,d.model,d.firmware\n" +
             "from wvp_platform_gb_channel pgc\n" +
             "         left join wvp_device_channel dc on dc.id = pgc.device_channel_id\n" +
             "         left join wvp_device d on dc.device_id = d.device_id\n" +

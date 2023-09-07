@@ -398,8 +398,17 @@ public interface DeviceChannelMapper {
             " from wvp_device_channel dc" +
             " LEFT JOIN wvp_platform_gb_channel pgc on  dc.id = pgc.device_channel_id" +
             " LEFT JOIN wvp_platform_catalog pc on pgc.catalog_id = pc.id and pgc.platform_id = pc.platform_id" +
-            " where pgc.platform_id=#{serverGBId}")
+            " where pgc.platform_id=#{serverGBId} and SUBSTR(dc.channel_id ,11,3 ) <> '137' ")
     List<DeviceChannel> queryChannelWithCatalog(String serverGBId);
+
+    @Select(" select dc.id, dc.channel_id, dc.device_id, dc.name, dc.manufacture,dc.model,dc.owner, dc.block, \n" +
+            " dc.address, '0' as parental,'0' as channel_type, dc.parent_id, dc.safety_way, dc.register_way,dc.cert_num, dc.certifiable,  \n" +
+            " dc.err_code,dc.end_time, dc.secrecy,   dc.ip_address,  dc.port,  dc.ptz_type,  dc.password, dc.status, \n" +
+            " dc.longitude_wgs84 as longitude, dc.latitude_wgs84 as latitude\n" +
+            " from wvp_device_channel dc\n" +
+            " LEFT JOIN wvp_platform_gb_channel pgc on  dc.id = pgc.device_channel_id\n" +
+            " where pgc.platform_id=#{serverGBId} and SUBSTR(dc.channel_id ,11,3 ) = '137';")
+    List<DeviceChannel> queryAudioChannel(String serverGBId);
 
     @Select("select * from wvp_device_channel where device_id = #{deviceId}")
     List<DeviceChannel> queryAllChannels(String deviceId);

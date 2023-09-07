@@ -169,7 +169,7 @@ public class AckRequestProcessor extends SIPRequestProcessorParent implements In
 			}
 			String is_Udp = sendRtpItem.isTcp() ? "0" : "1";
 			MediaServerItem mediaInfo = mediaServerService.getOne(sendRtpItem.getMediaServerId());
-			logger.info("收到ACK，rtp/{}开始向设备推流, 目标={}:{}，SSRC={}", sendRtpItem.getStreamId(), sendRtpItem.getIp(), sendRtpItem.getPort(), sendRtpItem.getSsrc());
+			logger.info("收到ACK，{}/{}开始向设备推流, 目标={}:{}，SSRC={}",sendRtpItem.getApp(), sendRtpItem.getStreamId(), sendRtpItem.getIp(), sendRtpItem.getPort(), sendRtpItem.getSsrc());
 			Map<String, Object> param = new HashMap<>(12);
 			param.put("vhost","__defaultVhost__");
 			param.put("app",sendRtpItem.getApp());
@@ -186,7 +186,13 @@ public class AckRequestProcessor extends SIPRequestProcessorParent implements In
 				// 开启rtcp保活
 				param.put("udp_rtcp_timeout", sendRtpItem.isRtcp()? "1":"0");
 			}
-			JSONObject startSendRtpStreamResult = zlmServerFactory.startSendRtpStream(mediaInfo, param);
+			JSONObject startSendRtpStreamResult = null;
+			if (sendRtpItem.isTcp() && !sendRtpItem.isTcpActive()) {
+				// TCP被动模式推流，先监听端口，收到连接后推流
+				startSendRtpStreamResult = zlmServerFactory.startSendRtpStreamForPassive(mediaInfo, param);
+			} else {
+				startSendRtpStreamResult = zlmServerFactory.startSendRtpStream(mediaInfo, param);
+			}
 			if (startSendRtpStreamResult != null) {
 				startSendRtpStreamHand(evt, sendRtpItem, null, device, startSendRtpStreamResult, param, callIdHeader);
 			}

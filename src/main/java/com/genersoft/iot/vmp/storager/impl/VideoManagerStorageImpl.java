@@ -1046,6 +1046,9 @@ public class VideoManagerStorageImpl implements IVideoManagerStorage {
 
 	@Override
 	public List<DeviceChannel> queryChannelWithCatalog(String serverGBId) {
-		return deviceChannelMapper.queryChannelWithCatalog(serverGBId);
+		List<DeviceChannel> videoChannels = deviceChannelMapper.queryChannelWithCatalog(serverGBId);
+		List<DeviceChannel> audioChannels = deviceChannelMapper.queryAudioChannel(serverGBId);
+		videoChannels.addAll(audioChannels);
+		return videoChannels;
 	}
 }

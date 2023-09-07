@@ -9,6 +9,7 @@ import com.genersoft.iot.vmp.conf.DynamicTask;
 import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
+import com.genersoft.iot.vmp.gb28181.bean.BroadcastInfoHolder;
 import com.genersoft.iot.vmp.gb28181.event.EventPublisher;
 import com.genersoft.iot.vmp.gb28181.session.SSRCFactory;
 import com.genersoft.iot.vmp.media.zlm.*;
@@ -115,7 +116,8 @@ public class MediaServerServiceImpl implements IMediaServerService {
     @Autowired
     private ThreadPoolTaskExecutor taskExecutor;
 
-
+    @Autowired
+    private BroadcastInfoHolder broadcastInfoHolder;
 
     /**
      * 初始化
@@ -130,6 +132,9 @@ public class MediaServerServiceImpl implements IMediaServerService {
             // 更新
             if (ssrcFactory.hasMediaServerSSRC(mediaServerItem.getId())) {
                 ssrcFactory.initMediaServerSSRC(mediaServerItem.getId(), null);
+            }
+            if (broadcastInfoHolder.hasMediaServerAudioChannel(mediaServerItem.getId())){
+                broadcastInfoHolder.initMediaServerAudioChannelId(mediaServerItem.getId(), null);
             }
             // 查询redis是否存在此mediaServer
             String key = VideoManagerConstants.MEDIA_SERVER_PREFIX + userSetting.getServerId() + "_" + mediaServerItem.getId();
@@ -220,7 +225,7 @@ public class MediaServerServiceImpl implements IMediaServerService {
     @Override
     public void clearRTPServer(MediaServerItem mediaServerItem) {
         ssrcFactory.reset(mediaServerItem.getId());
-
+        broadcastInfoHolder.reset(mediaServerItem.getId());
     }
 
 
@@ -231,6 +236,9 @@ public class MediaServerServiceImpl implements IMediaServerService {
         MediaServerItem mediaServerItemInDataBase = mediaServerMapper.queryOne(mediaSerItem.getId());
         if (mediaServerItemInRedis == null || ssrcFactory.hasMediaServerSSRC(mediaSerItem.getId())) {
             ssrcFactory.initMediaServerSSRC(mediaServerItemInDataBase.getId(),null);
+        }
+        if (mediaServerItemInRedis == null || broadcastInfoHolder.hasMediaServerAudioChannel(mediaSerItem.getId())) {
+            broadcastInfoHolder.initMediaServerAudioChannelId(mediaServerItemInDataBase.getId(),null);
         }
         String key = VideoManagerConstants.MEDIA_SERVER_PREFIX + userSetting.getServerId() + "_" + mediaServerItemInDataBase.getId();
         redisTemplate.opsForValue().set(key, mediaServerItemInDataBase);
@@ -413,6 +421,9 @@ public class MediaServerServiceImpl implements IMediaServerService {
         String key = VideoManagerConstants.MEDIA_SERVER_PREFIX + userSetting.getServerId() + "_" + zlmServerConfig.getGeneralMediaServerId();
         if (ssrcFactory.hasMediaServerSSRC(serverItem.getId())) {
             ssrcFactory.initMediaServerSSRC(zlmServerConfig.getGeneralMediaServerId(), null);
+        }
+        if (broadcastInfoHolder.hasMediaServerAudioChannel(serverItem.getId())) {
+            broadcastInfoHolder.initMediaServerAudioChannelId(zlmServerConfig.getGeneralMediaServerId(), null);
         }
         redisTemplate.opsForValue().set(key, serverItem);
         resetOnlineServerItem(serverItem);
@@ -710,7 +721,12 @@ public class MediaServerServiceImpl implements IMediaServerService {
             }
             // zlm连接重试
             logger.warn("[更新ZLM 保活信息]尝试链接zml id {}", mediaServerId);
-            ssrcFactory.initMediaServerSSRC(mediaServerItem.getId(), null);
+            if (!ssrcFactory.hasMediaServerSSRC(mediaServerItem.getId())){
+                ssrcFactory.initMediaServerSSRC(mediaServerItem.getId(), null);
+            }
+            if (!broadcastInfoHolder.hasMediaServerAudioChannel(mediaServerItem.getId())){
+                broadcastInfoHolder.initMediaServerAudioChannelId(mediaServerItem.getId(), null);
+            }
             String key = VideoManagerConstants.MEDIA_SERVER_PREFIX + userSetting.getServerId() + "_" + mediaServerItem.getId();
             redisTemplate.opsForValue().set(key, mediaServerItem);
             clearRTPServer(mediaServerItem);

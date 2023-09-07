@@ -174,17 +174,16 @@ public interface ISIPCommander {
 	 * @param device  视频设备
 	 * @param channelId  预览通道
 	 */
-	void audioBroadcastCmd(Device device,String channelId);
+	void audioBroadcastCmd(Device device, String sourceId, String channelId) throws InvalidArgumentException, ParseException, SipException;
 	
 	/**
 	 * 语音广播
 	 * 
 	 * @param device  视频设备
 	 */
-	void audioBroadcastCmd(Device device, DeviceChannel deviceChannel, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException;
+	void audioBroadcastCmd(Device device, String sourceId, String channelId, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException;
 	void audioBroadcastCmd(Device device) throws InvalidArgumentException, SipException, ParseException;
 
-	void audioInviteCmd(Device device, DeviceChannel deviceChannel, MediaServerItem mediaServerItem) throws InvalidArgumentException, SipException, ParseException;
 	/**
 	 * 音视频录像控制
 	 * 

@@ -20,15 +20,15 @@ export default {
       loading: false,
       calling: false,
       webrtcUrl: '',
-      mediaId: ''
+      audioChannelId: ''
     }
   },
   mounted() {
-    this.getRtcUrl();
     console.log(userService.getUser());
   },
   methods: {
-    call() {
+    async call() {
+      await this.getRtcUrl();
       let that = this
       this.loading = true
       webrtcPusher = new ZLMRTCClient.Endpoint({
@@ -44,11 +44,25 @@ export default {
       webrtcPusher.on(ZLMRTCClient.Events.WEBRTC_ICE_CANDIDATE_ERROR,function(e)
       {// ICE 协商出错
           console.log('ICE 协商出错')
+          that.loading = false
+          that.calling = false
+          that.$message({
+            showClose: true,
+            message: 'ICE 协商出错',
+            type: 'warning',
+          });
       });
 
       webrtcPusher.on(ZLMRTCClient.Events.WEBRTC_OFFER_ANWSER_EXCHANGE_FAILED,function(e)
       {// offer anwser 交换失败
           console.log('offer anwser 交换失败',e)
+          that.loading = false
+          that.calling = false
+          that.$message({
+            showClose: true,
+            message: 'offer anwser 交换失败',
+            type: 'warning',
+          });
           stop();
       });
 
@@ -57,8 +71,6 @@ export default {
         console.log('当前状态==>',state)
         if(state === 'connected'){
           that.boadcast()
-        } else {
-          that.calling = false
         }
       });
 
@@ -67,39 +79,51 @@ export default {
       this.loading = true
       this.$axios({
         method: 'get',
-        url:`/api/play/broadcast/stop/${this.deviceId}/${this.channelId}`,
+        url:`/api/play/broadcast/stop/${this.deviceId}/${this.channelId}?audioChannelId=${this.audioChannelId}`,
       }).then(res => {
+        this.loading = false
         if(res.data.code === 0){
           this.calling = false
-          this.loading = false
+        }
+        if(webrtcPusher)
+        {
+          webrtcPusher.close();
+          webrtcPusher = null;
         }
       })
     },
     boadcast() {
       this.$axios({
         method: 'get',
-        url:`/api/play/broadcast/${this.deviceId}/${this.channelId}?mediaServerId=${this.mediaId}`,
+        url:`/api/play/broadcast/${this.deviceId}/${this.channelId}?audioChannelId=${this.audioChannelId}`,
       }).then(res => {
+        this.loading = false
         if(res.data.code === 0){
           this.calling = true
-          this.loading = false
+        } else {
+          this.calling = false
+          this.$message({
+            showClose: true,
+            message: res.data.msg,
+            type: 'warning',
+          });
+          this.hangUp()
         }
       })
     },
-    getRtcUrl() {
-      this.$axios({
+    async getRtcUrl() {
+      const res = await this.$axios({
         method: 'get',
         url:`/api/v1/stream/pushRtc/${this.deviceId}/${this.channelId}`,
-      }).then(res => {
-        console.log('111111', res)
-        if (location.protocol === "https:") {
+      });
+      if (location.protocol === "https:") {
           this.webrtcUrl = res.data.pushRtcs + "&sign=" + crypto.createHash('md5').update(userService.getUser().pushKey, "utf8").digest('hex')
         }else {
           this.webrtcUrl = res.data.pushRtc + "&sign=" + crypto.createHash('md5').update(userService.getUser().pushKey, "utf8").digest('hex')
         }
-        this.mediaId = res.data.mediaId
-        console.log(this.webrtcUrl)
-      })
+      this.audioChannelId = res.data.audioChannelId
+      console.log(this.webrtcUrl)
+      return this.audioChannelId
     }
   }
 }

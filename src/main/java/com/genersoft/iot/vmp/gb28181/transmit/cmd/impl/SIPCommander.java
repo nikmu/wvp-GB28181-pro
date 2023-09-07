@@ -611,7 +611,7 @@ public class SIPCommander implements ISIPCommander {
             throw new SsrcTransactionNotFoundException(device.getDeviceId(), channelId, callId, stream);
         }
         streamSession.remove(ssrcTransaction.getDeviceId(), ssrcTransaction.getChannelId(), ssrcTransaction.getStream());
-        Request byteRequest = headerProvider.createByteRequest(device, channelId, ssrcTransaction.getSipTransactionInfo());
+        Request byteRequest = headerProvider.createByteRequest(device, channelId, stream, ssrcTransaction.getSipTransactionInfo());
         sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), byteRequest, null, null);
     }
 
@@ -629,7 +629,7 @@ public class SIPCommander implements ISIPCommander {
         mediaServerService.closeRTPServer(ssrcTransaction.getMediaServerId(), ssrcTransaction.getStream());
         streamSession.remove(ssrcTransaction.getDeviceId(), ssrcTransaction.getChannelId(), ssrcTransaction.getStream());
 
-        Request byteRequest = headerProvider.createByteRequest(device, channelId, ssrcTransaction.getSipTransactionInfo());
+        Request byteRequest = headerProvider.createByteRequest(device, channelId, null, ssrcTransaction.getSipTransactionInfo());
         sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), byteRequest, null, okEvent);
     }
 
@@ -640,7 +640,8 @@ public class SIPCommander implements ISIPCommander {
      * @param channelId 预览通道
      */
     @Override
-    public void audioBroadcastCmd(Device device, String channelId) {
+    public void audioBroadcastCmd(Device device,String sourceId, String channelId) throws InvalidArgumentException, ParseException, SipException {
+        audioBroadcastCmd(device, sourceId, channelId, null);
     }
 
     /**
@@ -669,34 +670,7 @@ public class SIPCommander implements ISIPCommander {
     }
 
     @Override
-    public void audioInviteCmd(Device device, DeviceChannel deviceChannel, MediaServerItem mediaServerItem) throws InvalidArgumentException, SipException, ParseException {
-        int localPort = 30002;
-        StringBuffer content = new StringBuffer(200);
-        content.append("v=0\r\n");
-        content.append("o=" + sipConfig.getId() + " 0 0 IN IP4 " + mediaServerItem.getSdpIp() + "\r\n");
-        content.append("s=Talk\r\n");
-        content.append("c=IN IP4 " + mediaServerItem.getSdpIp() + "\r\n");
-        content.append("t=0 0\r\n");
-        content.append("m=audio " + localPort + " RTP/AVP 8 96\r\n");
-        content.append("a=sendrecv\r\n");
-        content.append("a=rtpmap:8 PCMA/8000\r\n");
-        content.append("a=rtpmap:96 PS/90000\r\n");
-        content.append("y=0200000002\r\n");
-        content.append("f=v/a/1/8/1\r\n");
-
-        Request request = headerProvider.createInviteRequest(device, deviceChannel.getChannelId(), content.toString(),
-                SipUtils.getNewViaTag(), SipUtils.getNewFromTag(), null, "0200000002",
-                sipSender.getNewCallIdHeader(sipLayer.getLocalIp(device.getLocalIp()),device.getTransport()));
-
-        sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), request, (e -> {
-
-        }), e -> {
-
-        });
-    }
-
-    @Override
-    public void audioBroadcastCmd(Device device, DeviceChannel deviceChannel, SipSubscribe.Event errorEvent) throws InvalidArgumentException, SipException, ParseException {
+    public void audioBroadcastCmd(Device device, String sourceId, String channelId, SipSubscribe.Event errorEvent) throws InvalidArgumentException, SipException, ParseException {
 
         StringBuffer broadcastXml = new StringBuffer(200);
         String charset = device.getCharset();
@@ -704,8 +678,8 @@ public class SIPCommander implements ISIPCommander {
         broadcastXml.append("<Notify>\r\n");
         broadcastXml.append("<CmdType>Broadcast</CmdType>\r\n");
         broadcastXml.append("<SN>" + (int) ((Math.random() * 9 + 1) * 100000) + "</SN>\r\n");
-        broadcastXml.append("<SourceID>" + sipConfig.getId() + "</SourceID>\r\n");
-        broadcastXml.append("<TargetID>" + deviceChannel.getChannelId() + "</TargetID>\r\n");
+        broadcastXml.append("<SourceID>" + sourceId + "</SourceID>\r\n");
+        broadcastXml.append("<TargetID>" + channelId + "</TargetID>\r\n");
         broadcastXml.append("</Notify>\r\n");
 
         
@@ -1258,7 +1232,6 @@ public class SIPCommander implements ISIPCommander {
      * @param startPriority 报警起始级别（可选）
      * @param endPriority   报警终止级别（可选）
      * @param alarmMethod   报警方式条件（可选）
-     * @param alarmType     报警类型
      * @param startTime     报警发生起始时间（可选）
      * @param endTime       报警发生终止时间（可选）
      * @return true = 命令发送成功

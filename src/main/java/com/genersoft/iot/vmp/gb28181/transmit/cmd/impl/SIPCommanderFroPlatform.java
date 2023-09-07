@@ -1,24 +1,33 @@
 package com.genersoft.iot.vmp.gb28181.transmit.cmd.impl;
 
 import com.alibaba.fastjson2.JSON;
+import com.genersoft.iot.vmp.common.InviteSessionType;
 import com.genersoft.iot.vmp.conf.DynamicTask;
+import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.gb28181.SipLayer;
 import com.genersoft.iot.vmp.gb28181.bean.*;
 import com.genersoft.iot.vmp.gb28181.event.SipSubscribe;
+import com.genersoft.iot.vmp.gb28181.session.VideoStreamSessionManager;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPSender;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.ISIPCommanderForPlatform;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.SIPRequestHeaderPlarformProvider;
 import com.genersoft.iot.vmp.gb28181.utils.SipUtils;
 import com.genersoft.iot.vmp.media.zlm.ZLMServerFactory;
+import com.genersoft.iot.vmp.media.zlm.ZlmHttpHookSubscribe;
+import com.genersoft.iot.vmp.media.zlm.dto.HookSubscribeFactory;
+import com.genersoft.iot.vmp.media.zlm.dto.HookSubscribeForStreamChange;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
+import com.genersoft.iot.vmp.media.zlm.dto.hook.HookParam;
 import com.genersoft.iot.vmp.service.IMediaServerService;
 import com.genersoft.iot.vmp.service.bean.GPSMsgInfo;
+import com.genersoft.iot.vmp.service.bean.SSRCInfo;
 import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.storager.dao.dto.PlatformRegisterInfo;
 import com.genersoft.iot.vmp.utils.DateUtil;
 import com.genersoft.iot.vmp.utils.GitUtil;
 import gov.nist.javax.sip.message.MessageFactoryImpl;
 import gov.nist.javax.sip.message.SIPRequest;
+import gov.nist.javax.sip.message.SIPResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +37,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.ObjectUtils;
 
 import javax.sip.InvalidArgumentException;
+import javax.sip.ResponseEvent;
 import javax.sip.SipException;
 import javax.sip.SipFactory;
 import javax.sip.header.CallIdHeader;
@@ -69,6 +79,15 @@ public class SIPCommanderFroPlatform implements ISIPCommanderForPlatform {
 
     @Autowired
     private GitUtil gitUtil;
+
+    @Autowired
+    private SipConfig sipConfig;
+
+    @Autowired
+    private VideoStreamSessionManager streamSession;
+
+    @Autowired
+    private ZlmHttpHookSubscribe subscribe;
 
     @Override
     public void register(ParentPlatform parentPlatform, SipSubscribe.Event errorEvent , SipSubscribe.Event okEvent) throws InvalidArgumentException, ParseException, SipException {
@@ -827,5 +846,78 @@ public class SIPCommanderFroPlatform implements ISIPCommanderForPlatform {
             logger.warn("[向上级发送bye]：无法创建 byeRequest");
         }
         sipSender.transmitRequest(parentPlatform.getDeviceIp(),byeRequest);
+    }
+
+    @Override
+    public void audioBroadcastResponseCmd(ParentPlatform parentPlatform, String channelId, String sn, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException {
+        StringBuffer broadcastXml = new StringBuffer(200);
+        String charset = parentPlatform.getCharacterSet();
+        broadcastXml.append("<?xml version=\"1.0\" encoding=\"" + charset + "\"?>\r\n");
+        broadcastXml.append("<Response>\r\n");
+        broadcastXml.append("<CmdType>Broadcast</CmdType>\r\n");
+        broadcastXml.append("<SN>" + sn + "</SN>\r\n");
+        broadcastXml.append("<DeviceID>" + channelId + "</DeviceID>\r\n");
+        broadcastXml.append("<Result>OK</Result>\r\n");
+        broadcastXml.append("</Response>\r\n");
+
+        Request request = headerProviderPlatformProvider.createMessageRequest(parentPlatform, broadcastXml.toString(), SipUtils.getNewViaTag(), SipUtils.getNewFromTag(), sipSender.getNewCallIdHeader(sipLayer.getLocalIp(parentPlatform.getServerIP()), parentPlatform.getTransport()));
+        sipSender.transmitRequest(parentPlatform.getDeviceIp(), request, errorEvent, okEvent);
+    }
+
+    @Override
+    public void audioInviteCmd(ParentPlatform parentPlatform, String audioChannelId, MediaServerItem mediaServerItem, SSRCInfo ssrcInfo, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent, ZlmHttpHookSubscribe.Event event) throws InvalidArgumentException, SipException, ParseException {
+
+        logger.info("{} 分配的ZLM为: {} [{}:{}]", ssrcInfo.getStream(), mediaServerItem.getId(), mediaServerItem.getSdpIp(), ssrcInfo.getPort());
+        HookSubscribeForStreamChange hookSubscribe = HookSubscribeFactory.on_stream_changed("rtp", ssrcInfo.getStream(), true, "rtsp", mediaServerItem.getId());
+        subscribe.addSubscribe(hookSubscribe, (MediaServerItem mediaServerItemInUse, HookParam hookParam) -> {
+            if (event != null) {
+                event.response(mediaServerItemInUse, hookParam);
+                subscribe.removeSubscribe(hookSubscribe);
+            }
+        });
+
+        StringBuffer content = new StringBuffer(200);
+        content.append("v=0\r\n");
+        content.append("o=" + sipConfig.getId() + " 0 0 IN IP4 " + mediaServerItem.getSdpIp() + "\r\n");
+        content.append("s=Play\r\n");
+        content.append("c=IN IP4 " + mediaServerItem.getSdpIp() + "\r\n");
+        content.append("t=0 0\r\n");
+
+        String streamMode = parentPlatform.getStreamMode().toUpperCase();
+        if ("TCP-PASSIVE".equals(streamMode)) {
+            content.append("m=audio " + ssrcInfo.getPort() + " TCP/RTP/AVP 0 8 96\r\n");
+        } else if ("TCP-ACTIVE".equals(streamMode)) {
+            content.append("m=audio " + ssrcInfo.getPort() + " TCP/RTP/AVP 0 8 96\r\n");
+        } else if ("UDP".equals(streamMode)) {
+            content.append("m=audio " + ssrcInfo.getPort() + " RTP/AVP 0 8 96\r\n");
+        }
+        content.append("a=recvonly\r\n");
+        content.append("a=rtpmap:0 PCMU/8000\r\n");
+        content.append("a=rtpmap:8 PCMA/8000\r\n");
+        content.append("a=rtpmap:96 PS/90000\r\n");
+        if ("TCP-PASSIVE".equals(streamMode)) {
+            content.append("a=connection:new\r\n");
+            content.append("a=setup:passive\r\n");
+        } else if ("TCP-ACTIVE".equals(streamMode)) {
+            content.append("a=connection:new\r\n");
+            content.append("a=setup:active\r\n");
+        }
+        content.append("y=" + ssrcInfo.getSsrc() + "\r\n");//ssrc
+
+        Request request = headerProviderPlatformProvider.createInviteRequest(parentPlatform, audioChannelId, content.toString(),
+                SipUtils.getNewViaTag(), SipUtils.getNewFromTag(), null, ssrcInfo.getSsrc(),
+                sipSender.getNewCallIdHeader(sipLayer.getLocalIp(parentPlatform.getServerIP()), parentPlatform.getTransport()));
+
+        sipSender.transmitRequest(parentPlatform.getDeviceIp(), request, (e -> {
+            streamSession.remove(parentPlatform.getServerGBId(), audioChannelId, ssrcInfo.getStream());
+            mediaServerService.releaseSsrc(mediaServerItem.getId(), ssrcInfo.getSsrc());
+            if (errorEvent != null) errorEvent.response(e);
+        }), e -> {
+            ResponseEvent responseEvent = (ResponseEvent) e.event;
+            SIPResponse response = (SIPResponse) responseEvent.getResponse();
+            streamSession.put(parentPlatform.getServerGBId(), audioChannelId, "play", ssrcInfo.getStream(), ssrcInfo.getSsrc(), mediaServerItem.getId(), response,
+                    InviteSessionType.PLAY);
+            if (okEvent != null)  okEvent.response(e);
+        });
     }
 }

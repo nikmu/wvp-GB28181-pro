@@ -7,9 +7,9 @@ import com.genersoft.iot.vmp.common.StreamURL;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
-import com.genersoft.iot.vmp.conf.security.dto.LoginUser;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
+import com.genersoft.iot.vmp.gb28181.bean.BroadcastInfoHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.service.IDeviceService;
@@ -29,7 +29,6 @@ import org.springframework.web.context.request.async.DeferredResult;
 import javax.sip.InvalidArgumentException;
 import javax.sip.SipException;
 import java.text.ParseException;
-import java.util.List;
 
 /**
  * API兼容：实时直播
@@ -62,6 +61,9 @@ public class ApiStreamController {
 
     @Autowired
     private IInviteStreamService inviteStreamService;
+
+    @Autowired
+    private BroadcastInfoHolder broadcastInfoHolder;
 
     /**
      * 实时直播 - 开始直播
@@ -263,7 +265,6 @@ public class ApiStreamController {
         if (device == null) {
             throw new ControllerException(ErrorCode.ERROR400.getCode(), "设备：" + deviceId + "不存在" );
         }
-        MediaServerItem newMediaServerItem = playService.getNewMediaServerItem(device);
 
         if (!"137".equals(channelId.substring(10, 13))) {
             PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
@@ -273,16 +274,18 @@ public class ApiStreamController {
             }
             channelId = audioChannel.getChannelId();
         }
+        MediaServerItem mediaServerItem = playService.getNewMediaServerItem(device);
 
+        String audioChannelId = broadcastInfoHolder.getNewAudioChannel(deviceId, channelId, mediaServerItem);//语音输入设备是136
 
         JSONObject result = new JSONObject();
-        String file = String.format("index/api/webrtc?app=%s&stream=%s&type=push", "audio", deviceId.concat("_").concat(channelId));
-        StreamURL pushRtc = new StreamURL("http", newMediaServerItem.getStreamIp(), newMediaServerItem.getHttpPort(), file);
-        StreamURL pushRtcs = new StreamURL("https", newMediaServerItem.getStreamIp(), newMediaServerItem.getHttpSSlPort(), file);
+        String file = String.format("index/api/webrtc?app=%s&stream=%s&type=push", "rtp", audioChannelId);
+        StreamURL pushRtc = new StreamURL("http", mediaServerItem.getStreamIp(), mediaServerItem.getHttpPort(), file);
+        StreamURL pushRtcs = new StreamURL("https", mediaServerItem.getStreamIp(), mediaServerItem.getHttpSSlPort(), file);
 
         result.put("pushRtc", pushRtc.getUrl());
         result.put("pushRtcs", pushRtcs.getUrl());
-        result.put("mediaId", newMediaServerItem.getId());
+        result.put("audioChannelId", audioChannelId);
         return  result;
     }
 }
