@@ -213,14 +213,14 @@ public class AckRequestProcessor extends SIPRequestProcessorParent implements In
 				messageForPushChannel.setPlatFormIndex(parentPlatform.getId());
 				redisCatchStorage.sendPlatformStartPlayMsg(messageForPushChannel);
 			}
-			if ("137".equals(sendRtpItem.getChannelId().substring(10,13))){
+//			if ("137".equals(sendRtpItem.getChannelId().substring(10,13))){
 				// 推语音广播
 				String key = DeferredResultHolder.CALLBACK_CMD_BROADCAST + device.getDeviceId() + sendRtpItem.getChannelId();
 				RequestMessage msg = new RequestMessage();
             	msg.setKey(key);
 				msg.setData(WVPResult.success("语音通道已建立"));
 				deferredResultHolder.invokeAllResult(msg);
-			}
+//			}
 
 		} else {
 			logger.error("RTP推流失败: {}, 参数：{}",jsonObject.getString("msg"), JSON.toJSONString(param));

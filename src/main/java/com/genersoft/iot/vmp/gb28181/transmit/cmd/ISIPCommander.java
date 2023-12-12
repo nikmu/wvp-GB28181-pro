@@ -5,6 +5,7 @@ import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
 import com.genersoft.iot.vmp.gb28181.bean.Device;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceAlarm;
 import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
+import com.genersoft.iot.vmp.gb28181.bean.SendRtpItem;
 import com.genersoft.iot.vmp.gb28181.event.SipSubscribe;
 import com.genersoft.iot.vmp.media.zlm.ZlmHttpHookSubscribe;
 import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
@@ -183,6 +184,15 @@ public interface ISIPCommander {
 	 */
 	void audioBroadcastCmd(Device device, String sourceId, String channelId, SipSubscribe.Event okEvent) throws InvalidArgumentException, SipException, ParseException;
 	void audioBroadcastCmd(Device device) throws InvalidArgumentException, SipException, ParseException;
+
+	/**
+	 * 语音对讲talk模式
+	 * @param device
+	 * @param channelId
+	 * @param okEvent
+	 */
+	void audioTalk(MediaServerItem mediaServerItem, SendRtpItem sendRtpItem, Device device, String channelId,
+				   ZlmHttpHookSubscribe.Event event, SipSubscribe.Event okEvent, SipSubscribe.Event errorEvent) throws InvalidArgumentException, SipException, ParseException;
 
 	/**
 	 * 音视频录像控制

@@ -269,10 +269,13 @@ public class ApiStreamController {
         if (!"137".equals(channelId.substring(10, 13))) {
             PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
             DeviceChannel audioChannel = deviceChannels.getList().stream().filter(channel -> channel.getChannelId().startsWith("137", 10)).findFirst().orElse(null);
-            if (audioChannel == null) {
-                throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+//            if (audioChannel == null) {
+//                throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+//            }
+//            channelId = audioChannel.getChannelId();
+            if (audioChannel != null) {
+                channelId = audioChannel.getChannelId();
             }
-            channelId = audioChannel.getChannelId();
         }
         MediaServerItem mediaServerItem = playService.getNewMediaServerItem(device);
 
@@ -286,6 +289,7 @@ public class ApiStreamController {
         result.put("pushRtc", pushRtc.getUrl());
         result.put("pushRtcs", pushRtcs.getUrl());
         result.put("audioChannelId", audioChannelId);
+        result.put("code", 0);
         return  result;
     }
 }

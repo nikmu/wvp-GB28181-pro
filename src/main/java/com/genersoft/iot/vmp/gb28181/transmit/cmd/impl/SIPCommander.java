@@ -6,10 +6,7 @@ import com.genersoft.iot.vmp.conf.SipConfig;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
 import com.genersoft.iot.vmp.gb28181.SipLayer;
-import com.genersoft.iot.vmp.gb28181.bean.Device;
-import com.genersoft.iot.vmp.gb28181.bean.DeviceAlarm;
-import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
-import com.genersoft.iot.vmp.gb28181.bean.SsrcTransaction;
+import com.genersoft.iot.vmp.gb28181.bean.*;
 import com.genersoft.iot.vmp.gb28181.event.SipSubscribe;
 import com.genersoft.iot.vmp.gb28181.session.VideoStreamSessionManager;
 import com.genersoft.iot.vmp.gb28181.transmit.SIPSender;
@@ -24,6 +21,7 @@ import com.genersoft.iot.vmp.media.zlm.dto.MediaServerItem;
 import com.genersoft.iot.vmp.media.zlm.dto.hook.HookParam;
 import com.genersoft.iot.vmp.service.IMediaServerService;
 import com.genersoft.iot.vmp.service.bean.SSRCInfo;
+import com.genersoft.iot.vmp.storager.IRedisCatchStorage;
 import com.genersoft.iot.vmp.utils.DateUtil;
 import gov.nist.javax.sip.message.SIPRequest;
 import gov.nist.javax.sip.message.SIPResponse;
@@ -70,6 +68,9 @@ public class SIPCommander implements ISIPCommander {
 
     @Autowired
     private ZlmHttpHookSubscribe subscribe;
+
+    @Autowired
+    private IRedisCatchStorage redisCatchStorage;
 
 
 
@@ -667,6 +668,70 @@ public class SIPCommander implements ISIPCommander {
         Request request = headerProvider.createMessageRequest(device, broadcastXml.toString(), SipUtils.getNewViaTag(), SipUtils.getNewFromTag(), null,sipSender.getNewCallIdHeader(sipLayer.getLocalIp(device.getLocalIp()),device.getTransport()));
         sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), request);
 
+    }
+
+    @Override
+    public void audioTalk(MediaServerItem mediaServerItem, SendRtpItem sendRtpItem, Device device, String channelId,
+                          ZlmHttpHookSubscribe.Event event, SipSubscribe.Event okEvent, SipSubscribe.Event errorEvent) throws InvalidArgumentException, SipException, ParseException {
+        String stream = sendRtpItem.getStreamId();
+
+        if (device == null) {
+            return;
+        }
+
+        logger.info("{} 分配的ZLM为: {} [{}:{}]", stream, mediaServerItem.getId(), mediaServerItem.getSdpIp(), sendRtpItem.getLocalPort());
+        HookSubscribeForStreamChange hookSubscribe = HookSubscribeFactory.on_stream_changed("rtp", stream, true, "rtsp", mediaServerItem.getId());
+        subscribe.addSubscribe(hookSubscribe, (MediaServerItem mediaServerItemInUse, HookParam hookParam) -> {
+            if (event != null) {
+                event.response(mediaServerItemInUse, hookParam);
+                subscribe.removeSubscribe(hookSubscribe);
+            }
+        });
+        String sdpIp;
+        if (!ObjectUtils.isEmpty(device.getSdpIp())) {
+            sdpIp = device.getSdpIp();
+        }else {
+            sdpIp = mediaServerItem.getSdpIp();
+        }
+        StringBuffer content = new StringBuffer(200);
+        content.append("v=0\r\n");
+        content.append("o=" + channelId + " 0 0 IN IP4 " + sdpIp + "\r\n");
+        content.append("s=Talk\r\n");
+        content.append("c=IN IP4 " + sdpIp + "\r\n");
+        content.append("t=0 0\r\n");
+
+        content.append("m=audio " + sendRtpItem.getLocalPort() + " TCP/RTP/AVP 0 8 96\r\n");
+        content.append("a=sendrecv\r\n");
+        content.append("a=rtpmap:0 PCMU/8000\r\n");
+        content.append("a=rtpmap:8 PCMA/8000\r\n");
+        content.append("a=rtpmap:96 PS/90000\r\n");
+
+        if ("TCP-PASSIVE".equalsIgnoreCase(device.getStreamMode())) { // tcp被动模式
+            content.append("a=setup:passive\r\n");
+            content.append("a=connection:new\r\n");
+        } else if ("TCP-ACTIVE".equalsIgnoreCase(device.getStreamMode())) { // tcp主动模式
+            content.append("a=setup:active\r\n");
+            content.append("a=connection:new\r\n");
+        }
+        // f字段:f= v/编码格式/分辨率/帧率/码率类型/码率大小a/编码格式/码率大小/采样率
+        content.append("f=v/a/1/8/1" + "\r\n");
+        content.append("y=" + sendRtpItem.getSsrc() + "\r\n");//ssrc
+        CallIdHeader callIdHeader = sipSender.getNewCallIdHeader(sipLayer.getLocalIp(device.getLocalIp()), device.getTransport());
+        sendRtpItem.setCallId(callIdHeader.getCallId());
+        redisCatchStorage.updateSendRTPSever(sendRtpItem);
+
+        Request request = headerProvider.createInviteRequest(device, channelId, content.toString(), SipUtils.getNewViaTag(), SipUtils.getNewFromTag(), null, sendRtpItem.getSsrc(),callIdHeader);
+        sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), request, (e -> {
+            streamSession.remove(device.getDeviceId(), channelId, stream);
+            mediaServerService.releaseSsrc(mediaServerItem.getId(), sendRtpItem.getSsrc());
+            errorEvent.response(e);
+        }), e -> {
+            ResponseEvent responseEvent = (ResponseEvent) e.event;
+            SIPResponse response = (SIPResponse) responseEvent.getResponse();
+            streamSession.put(device.getDeviceId(), channelId, callIdHeader.getCallId(), stream, sendRtpItem.getSsrc(), mediaServerItem.getId(), response,
+                    InviteSessionType.TALK);
+            okEvent.response(e);
+        });
     }
 
     @Override

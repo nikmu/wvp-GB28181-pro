@@ -1,5 +1,14 @@
 <template>
   <div>
+    <el-form>
+      <el-form-item label="对讲模式">
+        <el-select v-model="model" placeholder="对讲模式">
+          <el-option label="国标对讲模式" value="gb"></el-option>
+          <el-option label="talk对讲模式" value="talk"></el-option>
+        </el-select>
+      </el-form-item>
+    </el-form>
+    
     <video id='webRtcPusherBox' controls autoplay style="display: none;">
       Your browser is too old which doesn't support HTML5 video.
     </video>
@@ -20,7 +29,8 @@ export default {
       loading: false,
       calling: false,
       webrtcUrl: '',
-      audioChannelId: ''
+      audioChannelId: '',
+      model: 'gb'
     }
   },
   mounted() {
@@ -29,6 +39,9 @@ export default {
   methods: {
     async call() {
       await this.getRtcUrl();
+      if(!this.webrtcUrl){
+        return
+      }
       let that = this
       this.loading = true
       webrtcPusher = new ZLMRTCClient.Endpoint({
@@ -70,7 +83,11 @@ export default {
       {// RTC 状态变化 ,详情参考 https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/connectionState
         console.log('当前状态==>',state)
         if(state === 'connected'){
-          that.boadcast()
+          if(that.model === 'gb') {
+            that.boadcast()
+          } else {
+            that.talk()
+          }
         }
       });
 
@@ -111,18 +128,43 @@ export default {
         }
       })
     },
+    talk() {
+      this.$axios({
+        method: 'get',
+        url:`/api/play/audio/start/${this.deviceId}/${this.channelId}?audioChannelId=${this.audioChannelId}`,
+      }).then(res => {
+        this.loading = false
+        if(res.data.code === 0){
+          this.calling = true
+        } else {
+          this.calling = false
+          this.$message({
+            showClose: true,
+            message: res.data.msg,
+            type: 'warning',
+          });
+          this.hangUp()
+        }
+      })
+    },
     async getRtcUrl() {
       const res = await this.$axios({
         method: 'get',
         url:`/api/v1/stream/pushRtc/${this.deviceId}/${this.channelId}`,
       });
-      if (location.protocol === "https:") {
+      if (res.data.code === 0) {
+        if (location.protocol === "https:") {
           this.webrtcUrl = res.data.pushRtcs + "&sign=" + crypto.createHash('md5').update(userService.getUser().pushKey, "utf8").digest('hex')
         }else {
           this.webrtcUrl = res.data.pushRtc + "&sign=" + crypto.createHash('md5').update(userService.getUser().pushKey, "utf8").digest('hex')
         }
-      this.audioChannelId = res.data.audioChannelId
-      console.log(this.webrtcUrl)
+        this.audioChannelId = res.data.audioChannelId
+        console.log(this.webrtcUrl)
+      } else {
+        this.webrtcUrl = ""
+        this.$message.error(res.data.msg);
+      }
+      
       return this.audioChannelId
     }
   }

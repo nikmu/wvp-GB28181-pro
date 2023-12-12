@@ -9,12 +9,9 @@ import com.genersoft.iot.vmp.common.StreamInfo;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.conf.exception.SsrcTransactionNotFoundException;
-import com.genersoft.iot.vmp.gb28181.bean.Device;
-import com.genersoft.iot.vmp.gb28181.bean.DeviceChannel;
-import com.genersoft.iot.vmp.gb28181.bean.SendRtpItem;
-import com.genersoft.iot.vmp.gb28181.bean.SsrcTransaction;
+import com.genersoft.iot.vmp.gb28181.bean.*;
+import com.genersoft.iot.vmp.gb28181.session.SSRCFactory;
 import com.genersoft.iot.vmp.gb28181.session.VideoStreamSessionManager;
-import com.genersoft.iot.vmp.gb28181.bean.BroadcastInfoHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.DeferredResultHolder;
 import com.genersoft.iot.vmp.gb28181.transmit.callback.RequestMessage;
 import com.genersoft.iot.vmp.gb28181.transmit.cmd.impl.SIPCommander;
@@ -97,6 +94,9 @@ public class PlayController {
 
 	@Autowired
 	private ZLMServerFactory zlmServerFactory;
+
+	@Autowired
+	private SSRCFactory ssrcFactory;
 
 	@Operation(summary = "开始点播")
 	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
@@ -284,10 +284,13 @@ public class PlayController {
 		if (!"137".equals(channelId.substring(10, 13))) {
 			PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
 			audioChannel = deviceChannels.getList().stream().filter(channel -> channel.getChannelId().startsWith("137", 10)).findFirst().orElse(null);
-			if (audioChannel == null) {
-				throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+//			if (audioChannel == null) {
+//				throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+//			}
+//			channelId = audioChannel.getChannelId();
+			if (audioChannel != null) {
+				channelId = audioChannel.getChannelId();
 			}
-			channelId = audioChannel.getChannelId();
 		} else {
 			audioChannel = storager.queryChannel(deviceId, channelId);
 		}
@@ -301,7 +304,7 @@ public class PlayController {
 		}
 		String uuid  = UUID.randomUUID().toString();
 		try {
-			cmder.audioBroadcastCmd(device, audioChannelId, audioChannel.getChannelId(), (event) -> {
+			cmder.audioBroadcastCmd(device, audioChannelId, finalChannelId, (event) -> {
 				RequestMessage msg = new RequestMessage();
 				msg.setKey(key);
 				msg.setId(uuid);
@@ -342,10 +345,13 @@ public class PlayController {
 		if (!"137".equals(channelId.substring(10, 13))) {
 			PageInfo<DeviceChannel> deviceChannels = storager.querySubChannels(deviceId, channelId, null, false, true, 1, 10);
 			DeviceChannel audioChannel = deviceChannels.getList().stream().filter(channel -> channel.getChannelId().startsWith("137", 10)).findFirst().orElse(null);
-			if (audioChannel == null) {
-				throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+//			if (audioChannel == null) {
+//				throw new ControllerException(ErrorCode.ERROR100.getCode(), "设备：" + deviceId + "不存在语音广播通道" );
+//			}
+//			channelId = audioChannel.getChannelId();
+			if (audioChannel != null) {
+				channelId = audioChannel.getChannelId();
 			}
-			channelId = audioChannel.getChannelId();
 		}
 
 		try {
@@ -372,6 +378,63 @@ public class PlayController {
 
 		return WVPResult.success("语音通道已关闭");
 	}
+
+	@Operation(summary = "talk语音广播")
+	@Parameter(name = "deviceId", description = "设备国标编号", required = true)
+	@RequestMapping("/audio/start/{deviceId}/{channelId}")
+	public DeferredResult<String> talkAudio(@PathVariable String deviceId,
+											@PathVariable String channelId,
+											@RequestParam String audioChannelId) {
+		logger.info("[开始语音对讲] deviceId：{}, channelId：{}, sourceChannelId: {}", deviceId, channelId, audioChannelId);
+		// 获取可用的zlm
+		Device device = redisCatchStorage.getDevice(deviceId);
+//		InviteInfo inviteInfo = inviteStreamService.getInviteInfoByDeviceAndChannel(InviteSessionType.TALK, deviceId, channelId);
+//		if (inviteInfo != null ) {
+//
+//		}
+		MediaServerItem newMediaServerItem = playService.getNewMediaServerItem(device);
+
+		RequestMessage requestMessage = new RequestMessage();
+		String key = DeferredResultHolder.CALLBACK_CMD_TALK + deviceId + channelId;
+		requestMessage.setKey(key);
+		String uuid = UUID.randomUUID().toString();
+		requestMessage.setId(uuid);
+		DeferredResult<String> result = new DeferredResult<>(userSetting.getPlayTimeout().longValue());
+
+		result.onTimeout(()->{
+			logger.info("[对讲等待超时] deviceId：{}, channelId：{}, ", deviceId, channelId);
+			// 释放rtpserver
+			WVPResult<StreamInfo> wvpResult = new WVPResult<>();
+			wvpResult.setCode(ErrorCode.ERROR100.getCode());
+			wvpResult.setMsg("对讲超时");
+			requestMessage.setData(wvpResult);
+			resultHolder.invokeAllResult(requestMessage);
+//			inviteStreamService.removeInviteInfoByDeviceAndChannel(InviteSessionType.TALK, deviceId, channelId);
+			storager.stopPlay(deviceId, channelId);
+		});
+
+		resultHolder.put(key, uuid, result);
+
+		String ssrc = ssrcFactory.getPlaySsrc(newMediaServerItem.getId());
+		SendRtpItem sendRtpItem = zlmServerFactory.createSendRtpItem(newMediaServerItem, device.getIp(), 0, ssrc, device.getDeviceId(),
+				"rtp", audioChannelId, channelId, true, false);
+		sendRtpItem.setPlayType(InviteStreamType.PLAY);
+		sendRtpItem.setOnlyAudio(true);
+
+		try {
+			cmder.audioTalk(newMediaServerItem, sendRtpItem, device, channelId, null, success -> {
+
+			}, error -> {
+
+			});
+		} catch (InvalidArgumentException | SipException | ParseException e) {
+			logger.error("[命令发送失败] 语音对讲: {}", e.getMessage());
+			broadcastInfoHolder.clearAudioChannel(audioChannelId);
+			throw new ControllerException(ErrorCode.ERROR100.getCode(), "命令发送失败: " + e.getMessage());
+		}
+		return result;
+	}
+
 
 	@Operation(summary = "获取所有的ssrc")
 	@GetMapping("/ssrc")

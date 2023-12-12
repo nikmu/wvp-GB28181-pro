@@ -957,7 +957,7 @@ public class InviteRequestProcessor extends SIPRequestProcessorParent implements
                     Media media = mediaDescription.getMedia();
 
                     Vector mediaFormats = media.getMediaFormats(false);
-                    if (mediaFormats.contains("8") || mediaFormats.contains("0")) {
+                    if (mediaFormats.contains("8") || mediaFormats.contains("0") || mediaFormats.contains("96")) {
                         port = media.getMediaPort();
                         String protocol = media.getProtocol();
                         // 区分TCP发流还是udp， 当前默认udp
@@ -990,10 +990,10 @@ public class InviteRequestProcessor extends SIPRequestProcessorParent implements
                 String addressStr = sdp.getConnection().getAddress();
                 logger.info("设备{}请求语音流，地址：{}:{}，ssrc：{}", username, addressStr, port, ssrc);
 
-                String channelId = SipUtils.getChannelIdFromRequest(request);// 本地channelId
+                String channelId = SipUtils.getChannelIdFromRequest(request).replaceAll("@", "");// 本地channelId
 
                 Subject subject = (Subject) request.getHeader("subject");
-                String audioChannel = subject.getSubject().split(",")[0].split(":")[0];
+                String audioChannel = subject.getSubject().split(",")[0].split(":")[0].replaceAll("@", "");
                 BroadcastInfo broadcastInfo = broadcastInfoHolder.getBroadcastInfo(audioChannel);
                 MediaServerItem mediaServerItem = broadcastInfo.getMediaServerItem();
 
